@@ -1,7 +1,7 @@
 sphinx-ditaa
 ------------
 
-Simple Ditaa builder for sphinx
+Simple Ditaa builder for sphinx, for python 3. 
 
 ## Installation
 ```shell

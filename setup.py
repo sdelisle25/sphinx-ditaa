@@ -9,10 +9,10 @@ requires = [
 
 setup(
     name='sphinxcontrib-ditaa',
-    author='Arthur Gautier',
-    author_email='aga@zenexity.com',
-    url='https://github.com/baloo/sphinx-ditaa',
-    description='Sphinx plugin for rendering Ditaa diagrams',
+    author='Sylvain Delisle',
+    author_email='sylvain.delisle25@gmail.com',
+    url='https://github.com/sdelisle25/sphinxcontrib-ditaa',
+    description='Sphinx contribution plugin for rendering Ditaa diagrams',
     version='1.0',
     license="BSD",
     platforms='any',

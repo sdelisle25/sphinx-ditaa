@@ -15,7 +15,6 @@ import re
 import codecs
 import posixpath
 from os import path
-from math import ceil
 from subprocess import Popen, PIPE
 try:
     from hashlib import sha1 as sha
@@ -26,8 +25,8 @@ from docutils import nodes
 from docutils.parsers.rst import directives
 
 from sphinx.errors import SphinxError
-from sphinx.util.osutil import ensuredir, ENOENT, EPIPE
-from sphinx.util.compat import Directive
+from sphinx.util.osutil import ensuredir, ENOENT, EPIPE, EINVAL
+from docutils.parsers.rst import Directive
 
 
 mapname_re = re.compile(r'<map id="(.*?)"')
@@ -50,18 +49,18 @@ class Ditaa(Directive):
     required_arguments = 0
     optional_arguments = 0
     final_argument_whitespace = False
+
     option_spec = {
         'alt': directives.unchanged,
         'inline': directives.flag,
         'caption': directives.unchanged,
+        'options': directives.unchanged,
     }
 
     def run(self):
         if self.arguments:
-            print self.arguments
-            document = self.state.document
             if self.content:
-                return [document.reporter.warning(
+                return [self.state_machine.reporter.warning(
                     'Ditaa directive cannot have both content and '
                     'a filename argument', line=self.lineno)]
             env = self.state.document.settings.env
@@ -70,36 +69,44 @@ class Ditaa(Directive):
             try:
                 fp = codecs.open(filename, 'r', 'utf-8')
                 try:
-                    dotcode = fp.read()
+                    code_block = fp.read()
                 finally:
                     fp.close()
             except (IOError, OSError):
-                return [document.reporter.warning(
+                return [self.state_machine.reporter.warning(
                     'External Ditaa file %r not found or reading '
                     'it failed' % filename, line=self.lineno)]
         else:
-            dotcode = '\n'.join(self.content)
-            if not dotcode.strip():
-                return [self.state_machine.reporter.warning(
-                    'Ignoring "ditaa" directive without content.',
-                    line=self.lineno)]
+            code_block = '\n'.join(self.content)
+
+        # Verify valid content
+        if not code_block.strip():
+            return [self.state_machine.reporter.warning('Ignoring "ditaa" directive without content.', line=self.lineno)]
+
         node = ditaa()
-        node['code'] = dotcode
+        node['code'] = code_block
         node['options'] = []
+
         if 'alt' in self.options:
             node['alt'] = self.options['alt']
+
         if 'caption' in self.options:
             node['caption'] = self.options['caption']
         node['inline'] = 'inline' in self.options
+
+        if 'options' in self.options:
+            node['options'] = self.options['options'].split()
         return [node]
 
 def render_ditaa(self, code, options, prefix='ditaa'):
     """Render ditaa code into a PNG output file."""
-    hashkey = code.encode('utf-8') + str(options) + \
-              str(self.builder.config.ditaa) + \
-              str(self.builder.config.ditaa_args)
-    infname = '%s-%s.%s' % (prefix, sha(hashkey).hexdigest(), "ditaa")
-    outfname = '%s-%s.%s' % (prefix, sha(hashkey).hexdigest(), "png")
+
+    hashkey = "".join([str(code), str(options), str(self.builder.config.ditaa), str(self.builder.config.ditaa_args)])
+    hashkey = hashkey.encode('UTF-8')
+
+    digest = sha(hashkey).hexdigest()
+    infname = '%s-%s.%s' % (prefix, digest, "ditaa")
+    outfname = '%s-%s.%s' % (prefix, digest, "png")
 
     imgpath = self.builder.imgpath if hasattr(self.builder, 'imgpath') else ''
     inrelfn = posixpath.join(imgpath, infname)
@@ -113,59 +120,51 @@ def render_ditaa(self, code, options, prefix='ditaa'):
     ensuredir(path.dirname(outfullfn))
 
     # ditaa expects UTF-8 by default
-    if isinstance(code, unicode):
-        code = code.encode('utf-8')
+    if not isinstance(code, str):
+        self.builder.warn("Invalid code block type expected str type='%s'" % type(code))
+        return None, None
 
     ditaa_args = [self.builder.config.ditaa]
     ditaa_args.extend(self.builder.config.ditaa_args)
     ditaa_args.extend(options)
-    ditaa_args.extend( [infullfn] )
-    ditaa_args.extend( [outfullfn] )
+    ditaa_args.extend([infullfn])
+    ditaa_args.extend([outfullfn])
 
-    f = open(infullfn, 'w')
-    f.write(code)
-    f.close()
+    # TODO: verify code encoding bytes to string
+    with open(infullfn, 'wt') as fd:
+        fd.write(code)
 
     try:
-        self.builder.warn(ditaa_args)
         p = Popen(ditaa_args, stdout=PIPE, stdin=PIPE, stderr=PIPE)
-    except OSError, err:
-        if err.errno != ENOENT:   # No such file or directory
+    except OSError as err:
+        if err.errno != ENOENT:  # No such file or directory
             raise
         self.builder.warn('ditaa command %r cannot be run (needed for ditaa '
                           'output), check the ditaa setting' %
                           self.builder.config.ditaa)
         self.builder._ditaa_warned_dot = True
         return None, None
-    wentWrong = False
+
     try:
-        # Ditaa may close standard input when an error occurs,
-        # resulting in a broken pipe on communicate()
-        stdout, stderr = p.communicate(code)
-    except OSError, err:
-        if err.errno != EPIPE:
+        stdout, stderr = p.communicate()
+    except (OSError, IOError) as err:
+        if (err.errno != EPIPE) and (err.errno != EINVAL):
             raise
-        wentWrong = True
-    except IOError, err:
-        if err.errno != EINVAL:
-            raise
-        wentWrong = True
-    if wentWrong:
-        # in this case, read the standard output and standard error streams
-        # directly, to get the error message(s)
         stdout, stderr = p.stdout.read(), p.stderr.read()
         p.wait()
+
     if p.returncode != 0:
         raise DitaaError('ditaa exited with error:\n[stderr]\n%s\n'
                             '[stdout]\n%s' % (stderr, stdout))
+
     return outrelfn, outfullfn
 
 
 def render_ditaa_html(self, node, code, options, prefix='ditaa',
                     imgcls=None, alt=None):
     try:
-        fname, outfn = render_ditaa(self, code, options, prefix)
-    except DitaaError, exc:
+        fname, _ = render_ditaa(self, code, options, prefix)
+    except DitaaError as _:
         raise nodes.SkipNode
 
     inline = node.get('inline', False)
@@ -183,6 +182,7 @@ def render_ditaa_html(self, node, code, options, prefix='ditaa',
                          fname)
 
     self.body.append('</%s>\n' % wrapper)
+
     raise nodes.SkipNode
 
 
@@ -193,11 +193,12 @@ def html_visit_ditaa(self, node):
 def render_ditaa_latex(self, node, code, options, prefix='ditaa'):
     try:
         fname, outfn = render_ditaa(self, code, options, prefix)
-    except DitaaError, exc:
+    except DitaaError as exc:
         raise nodes.SkipNode
 
     if fname is not None:
         self.body.append('\\par\\includegraphics{%s}\\par' % outfn)
+
     raise nodes.SkipNode
 
 

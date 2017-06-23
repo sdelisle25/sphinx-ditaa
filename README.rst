@@ -1,34 +1,41 @@
-sphinx-ditaa
-------------
+Sphinx contribution Ditaa
+#########################
 
 Simple Ditaa builder for sphinx, for python 3. 
 
-## Installation
-```shell
-pip3 install .
-```
+Installation
+------------
 
-install [ditaa command](http://ditaa.sourceforge.net/)
+.. code:: shell
 
-## Using the Ditaa with Sphinx
+    pip3 install .
 
-add `sphinxcontrib.ditaa` to the `extensions` list in `conf.py`:
 
-```python
-extensions = [
-   ... other extensions here ...
-   'sphinxcontrib.ditaa'
-   ]
+Install [ditaa command](http://ditaa.sourceforge.net/)
+
+Using the Ditaa with Sphinx
+---------------------------
+
+Add `sphinxcontrib.ditaa` to the `extensions` list in `conf.py`:
+
+.. code:: python
+
+    extensions = [
+       ... other extensions here ...
+       'sphinxcontrib.ditaa'
+       ]
 
 # ditaa command. should be install ditaa
 ditaa = 'ditaa'    # ditaa command
 # ditaa_args = ''  # custom ditaa args
-```
 
-write ditaa code in `rst` file.
 
-```
+Write ditaa code in `rst` documentation:
+
+::
+
     .. ditaa::
+
       +--------+   +-------+    +-------+
       |        | --+ ditaa +--> |       |
       |  Text  |   +-------+    |diagram|
@@ -38,4 +45,3 @@ write ditaa code in `rst` file.
           :                         ^
           |       Lots of work      |
           +-------------------------+
-```

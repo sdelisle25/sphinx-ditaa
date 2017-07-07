@@ -6,7 +6,7 @@ Simple Ditaa builder for sphinx, for python 3.
 Requirements
 ============
 
-ECG testing tool requires Python3.5, native dependency libusb_ and python packages. 
+Sphinx Ditaa requires Python_ 3.5, native dependency Ditaa_ and python packages. 
 
 * Python_ >=3.5
 
@@ -40,7 +40,7 @@ Installation
 
 
 Using the Ditaa with Sphinx
----------------------------
+===========================
 
 Add `sphinxcontrib.ditaa` to the `extensions` list in `conf.py`:
 
